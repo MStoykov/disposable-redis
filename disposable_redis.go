@@ -8,8 +8,10 @@ package disposable_redis
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -96,6 +98,40 @@ func NewServer(port uint16) (*Server, error) {
 
 }
 
+// Create and run a new server on a given port.
+// Return an error if the server cannot be started
+func NewSentinel(port uint16, forPort uint16) (*Server, error) {
+	var tmpConfig = fmt.Sprintf("/tmp/%d.%d.conf", port, time.Now().UnixNano())
+	err := ioutil.WriteFile(tmpConfig, []byte(fmt.Sprintf("sentinel monitor mymaster localhost %d 1\n", forPort)), 0666)
+	defer os.Remove(tmpConfig)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(RedisCommand,
+		tmpConfig,
+
+		"--port", fmt.Sprintf("%d", port),
+		"--pidfile", fmt.Sprintf("/tmp/disposable_redis.%d.pid", port),
+		"--dir", "/tmp", "--sentinel")
+
+	log.Println("start args: ", cmd.Args)
+
+	r := &Server{
+		cmd:     cmd,
+		port:    port,
+		running: false,
+	}
+
+	err = r.run()
+	if err != nil {
+		return nil, err
+	}
+	r.running = true
+
+	return r, nil
+
+}
+
 // Create a new server on a random port. If the port is taken we retry (10 times).
 // If we still couldn't start the process, we return an error
 func NewServerRandomPort() (*Server, error) {
@@ -107,6 +143,26 @@ func NewServerRandomPort() (*Server, error) {
 		log.Println("Trying port ", port)
 
 		r, err = NewServer(port)
+		if err == nil {
+			return r, nil
+		}
+	}
+
+	log.Println("Could not start throwaway redis")
+	return nil, err
+
+}
+
+// Create a new server on a random port. If the port is taken we retry (10 times).
+// If we still couldn't start the process, we return an error
+func NewSentinelRandomPort(forPort uint16) (*Server, error) {
+	var err error
+	var r *Server
+	for i := 0; i < MaxRetries; i++ {
+		port := uint16(rand.Int31n(0xffff-1025) + 1025)
+		log.Println("Trying port ", port)
+
+		r, err = NewSentinel(port, forPort)
 		if err == nil {
 			return r, nil
 		}
@@ -230,7 +286,22 @@ func (r Server) NewSlaveOf() (*Server, error) {
 	}
 
 	return srv, nil
+}
 
+// NewSentinelOf creates a new sentinel with a random port and makes it watch over the current server.
+func (r Server) NewSentinelOf() (*Server, error) {
+
+	srv, err := NewSentinelRandomPort(r.Port())
+	if err != nil {
+		return nil, err
+	}
+
+	if err = srv.WaitReady(100 * time.Millisecond); err != nil {
+		defer srv.Stop()
+		return nil, err
+	}
+
+	return srv, nil
 }
 
 // Get the port of this server
