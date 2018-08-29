@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	redigo "github.com/garyburd/redigo/redis"
+	redigo "github.com/gomodule/redigo/redis"
 )
 
 // The redis executable. This allows you to set it if you're using a custom one.

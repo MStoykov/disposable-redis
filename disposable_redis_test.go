@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	redigo "github.com/garyburd/redigo/redis"
+	redigo "github.com/gomodule/redigo/redis"
 )
 
 // make sure we can't start 2 servers on the same port
@@ -38,20 +38,20 @@ func TestDisposableRedis(t *testing.T) {
 	defer r.Stop()
 
 	if r.Port() < 1024 {
-		t.Fatalf("Invalid port")
+		t.Fatal("Invalid port")
 	}
 
 	if err = r.WaitReady(50 * time.Millisecond); err != nil {
-		t.Fatalf("Could not connect to server in time")
+		t.Fatal("Could not connect to server in time")
 	}
 
 	conn, err := redigo.Dial("tcp", fmt.Sprintf("localhost:%d", r.Port()))
 	if err != nil {
-		t.Fatalf("Could not connect to disposable server", err)
+		t.Fatalf("Could not connect to disposable server %s", err)
 	}
 
 	if _, err := conn.Do("PING"); err != nil {
-		t.Fatalf("Could not talk to redis")
+		t.Fatal("Could not talk to redis")
 	}
 	conn.Close()
 
@@ -72,7 +72,7 @@ func TestServerNewSlaveOf(t *testing.T) {
 	defer master.Stop()
 
 	if err = master.WaitReady(50 * time.Millisecond); err != nil {
-		t.Fatalf("Could not connect to server in time")
+		t.Fatal("Could not connect to server in time")
 	}
 
 	slave, err := master.NewSlaveOf()
@@ -83,27 +83,27 @@ func TestServerNewSlaveOf(t *testing.T) {
 
 	conn, err := redigo.Dial("tcp", fmt.Sprintf(master.Addr()))
 	if err != nil {
-		t.Fatalf("Could not connect to disposable server", err)
+		t.Fatalf("Could not connect to disposable server %s", err)
 	}
 
 	if _, err := conn.Do("SET", "foo", "bar"); err != nil {
-		t.Fatalf("Could not talk to master")
+		t.Fatal("Could not talk to master")
 	}
 	conn.Close()
 
 	conn, err = redigo.Dial("tcp", fmt.Sprintf("localhost:%d", slave.Port()))
 	if err != nil {
-		t.Fatalf("Could not connect to slave server", err)
+		t.Fatal("Could not connect to slave server", err)
 	}
 	defer conn.Close()
 
 	val, err := redigo.String(conn.Do("GET", "foo"))
 	if err != nil {
-		t.Fatal("Could not stop server", err)
+		t.Fatalf("Could not stop server %s", err)
 	}
 
 	if val != "bar" {
-		t.Fatalf("Replication didn't work: ", val)
+		t.Fatalf("Replication didn't work: %s", val)
 	}
 
 }
